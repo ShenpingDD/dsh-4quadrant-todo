@@ -784,9 +784,14 @@ await probe('C21', 'requirement', 'PRD 12.2', '写入失败时就地报错且错
   'status=500 且错误含「数据文件不可写」与路径', async () => {
     await resetData()
     await writeDataText(JSON.stringify(fixtureDocument(), null, 2))
-    // 正式文件只读时读取仍可成功，重命名覆盖被系统拒绝
+    // 正式文件只读时读取仍可成功，重命名覆盖被系统拒绝。
+    // POSIX 上「目录可写 + 文件只读」仍能 rename 覆盖，原子写会换掉只读文件，
+    // 所以额外把目录也设为只读，两种写法的失败路径都盖住。
+    const posix = process.platform !== 'win32'
     await fsp.chmod(dataFile, 0o444)
+    if (posix) await fsp.chmod(dataDir, 0o555)
     const response = await postJson('/create', { title: '写入失败样例', quadrant: 'urgent-important' })
+    if (posix) await fsp.chmod(dataDir, 0o755)
     await fsp.chmod(dataFile, 0o666)
     const leftovers = (await fsp.readdir(dataDir)).filter((name) => name.startsWith('todos.json.') && name.endsWith('.tmp'))
     await resetData()
