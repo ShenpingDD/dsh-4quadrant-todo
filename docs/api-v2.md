@@ -605,3 +605,21 @@ Host 定时器每 30 秒执行一次，对每个条目按下列顺序判定，�
 | 快速录入的解析规则与预览区 | 客户端实现，规则见 `docs/PRD-v2.md` F1；本文只固定写入时使用 `POST /create` 与 `tags` 字段 |
 | 今日视图分区与统计口径 | 客户端计算，口径见 `docs/PRD-v2.md` F2、F6；本文固定快照必须提供的字段 |
 | 标签筛选控件的布局与交互 | `docs/ui-spec-v2.md`；本文固定 `FilterConditions` 的字段与取值范围 |
+
+## 13. 2.1 追加：飞书同步管理接口（7 条）
+
+2.1 起路由总数为 **26 条**：既有 19 条路径、校验与错误文本全部不变，新增 7 条供「飞书同步」面板使用。新增路由都不改 `todos.json`，只读写数据目录里的 `sync-config.json` 与 `sync-state.json`，因此不进入待办写队列；POST 仍要求 `x-dsh-todo: 1` 与 `content-type: application/json`。
+
+| 方法 | 路径 | 作用 |
+| --- | --- | --- |
+| GET | `/sync/status` | `lark-cli` 是否安装与版本、用户身份状态与缺失 scope、当前清单映射、上次同步时间与日志尾部 |
+| GET | `/sync/tasklists` | 列出飞书账号下的任务清单（`guid` + `name`）；用户身份未就绪返回 409 |
+| POST | `/sync/login/start` | 启动设备码登录，返回 `deviceCode`、`verificationUrl`、`qrText`、`expiresIn` |
+| POST | `/sync/login/poll` | 用 `deviceCode` 查登录结果：`ready` 为真表示用户身份可用 |
+| POST | `/sync/tasklists/create` | 给还没选清单的象限创建同名飞书清单，并把 guid 写进配置 |
+| POST | `/sync/config` | 保存四个象限到清单的映射；返回 `missing` 列出仍缺的象限 |
+| POST | `/sync/run` | 触发一次同步（`dryRun` 为真时只统计不写入），返回脚本末行统计与错误 |
+
+错误约定：`lark-cli` 未安装时 `/sync/status` 仍返回 200 且 `cli.installed` 为 `false`（降级展示）；`sync-config.json` 损坏时 `/sync/status` 仍返回 200，把解析错误放在 `config.error`，不阻断面板；其余写接口的错误沿用 `{ ok: false, error }` 与 4xx 状态码。
+
+`/sync/run` 由宿主用 `node scripts/feishu-sync.mjs --api <当前宿主地址> --data-dir <数据目录>` 执行，端口取自请求的 `host` 头，因此桌面端随机端口也能回连，不再依赖 3080。

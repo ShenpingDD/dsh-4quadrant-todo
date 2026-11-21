@@ -1,4 +1,4 @@
-// 2.0 接口层验证：版本兼容、19 条路由、标签、重复生成、提醒、待确认事项、筛选预设、导入撤销、上限
+// 2.0 接口层验证：版本兼容、26 条路由、标签、重复生成、提醒、待确认事项、筛选预设、导入撤销、上限
 // 直接加载 lib/index.js 的 apply，用真实 node:http 与真实文件系统驱动，
 // 数据目录指向本目录下的 .run，不触碰 %DSH_HOME%。用例编号对应 docs/api-v2.md 第 10 节。
 
@@ -268,15 +268,22 @@ const ROUTES = [
   '/import',
   '/import/undo',
   '/upgrade',
-  '/pending'
+  '/pending',
+  '/sync/status',
+  '/sync/tasklists',
+  '/sync/login/start',
+  '/sync/login/poll',
+  '/sync/tasklists/create',
+  '/sync/config',
+  '/sync/run'
 ]
 
 // ---------- A. 路由清单与写入守卫 ----------
 
 {
   const missing = ROUTES.filter((route) => !handlers.has(`${PREFIX}${route}`))
-  check('A2-00a', '19 条 exact 路由全部注册', '0 条缺失', `缺失 ${missing.length} 条: ${missing.join(',')}`, missing.length === 0)
-  check('A2-00b', '路由总数', '19', String(handlers.size), handlers.size === 19)
+  check('A2-00a', '26 条 exact 路由全部注册', '0 条缺失', `缺失 ${missing.length} 条: ${missing.join(',')}`, missing.length === 0)
+  check('A2-00b', '路由总数', '26', String(handlers.size), handlers.size === 26)
 }
 
 {
@@ -1184,6 +1191,156 @@ function importPayload(document) {
       both.status === 200 &&
       typeof todo?.startedAt === 'string'
   )
+}
+
+// ---------- S. 飞书同步管理接口 ----------
+
+{
+  const stub = path.join(here, 'stub-lark-cli.mjs')
+  await fsp.chmod(stub, 0o755)
+  const previousCli = process.env.LARK_CLI
+  const previousUser = process.env.STUB_LARK_USER
+  const configPath = path.join(dataDir, 'sync-config.json')
+  const statePath = path.join(dataDir, 'sync-state.json')
+  const logPath = path.join(dataDir, 'sync.log')
+  process.env.LARK_CLI = stub
+  process.env.STUB_LARK_USER = 'missing'
+  await fsp.rm(configPath, { force: true })
+  await fsp.rm(statePath, { force: true })
+  await fsp.rm(logPath, { force: true })
+  await resetData()
+  await writeData({ version: 2, todos: [], collapsed: {}, filters: [], settings: { reminderLeadMinutes: 30, statsRange: 'week' }, meta: { upgradedAt: null, upgradedFrom: null } })
+
+  try {
+    const status = await getJson('/sync/status')
+    const statusValue = status.payload.value ?? {}
+    check(
+      'S1',
+      '状态接口报告 lark-cli 与用户身份',
+      '200，installed=true，version=9.9.9-stub，user.ready=false',
+      `status=${status.status} installed=${statusValue.cli?.installed} version=${statusValue.cli?.version} ready=${statusValue.auth?.user?.ready}`,
+      status.status === 200 && statusValue.cli?.installed === true && statusValue.cli?.version === '9.9.9-stub' && statusValue.auth?.user?.ready === false
+    )
+
+    const denied = await getJson('/sync/tasklists')
+    check(
+      'S2',
+      '未登录时读清单返回可操作的错误',
+      '409 且错误里提示先登录',
+      `status=${denied.status} error=${denied.payload.error}`,
+      denied.status === 409 && String(denied.payload.error ?? '').includes('登录')
+    )
+
+    const guard = await request('POST', '/sync/login/start', { headers: { 'content-type': 'application/json' }, body: '{}' })
+    check('S3', '登录接口受写入标记保护', '403 缺少写入标记', `status=${guard.status}`, guard.status === 403)
+
+    const login = await postJson('/sync/login/start', {})
+    const loginValue = login.payload.value ?? {}
+    check(
+      'S4',
+      '设备码登录返回授权链接与二维码文本',
+      '200，带 deviceCode 与 verificationUrl',
+      `status=${login.status} code=${String(loginValue.deviceCode)} url=${String(loginValue.verificationUrl)}`,
+      login.status === 200 && loginValue.deviceCode === 'stub-device' && String(loginValue.verificationUrl).startsWith('https://')
+    )
+
+    const poll = await postJson('/sync/login/poll', { deviceCode: 'stub-device' })
+    check(
+      'S5',
+      '轮询登录状态',
+      '200 且 ready=false',
+      `status=${poll.status} ready=${poll.payload.value?.ready} waiter=${poll.payload.value?.waiterState}`,
+      poll.status === 200 && poll.payload.value?.ready === false
+    )
+
+    process.env.STUB_LARK_USER = 'ready'
+    const lists = await getJson('/sync/tasklists')
+    check(
+      'S6',
+      '登录后能读到清单列表',
+      '200 且返回 2 个清单',
+      `status=${lists.status} count=${lists.payload.value?.count}`,
+      lists.status === 200 && lists.payload.value?.count === 2
+    )
+
+    const saved = await postJson('/sync/config', {
+      lists: {
+        'urgent-important': 'g_urgent',
+        'urgent-not-important': 'g_a',
+        'not-urgent-important': 'g_b',
+        'not-urgent-not-important': 'g_c'
+      },
+      intervalMinutes: 15
+    })
+    check(
+      'S7',
+      '保存四个象限的清单映射',
+      '200 且 missing 为空',
+      `status=${saved.status} missing=${JSON.stringify(saved.payload.value?.missing)}`,
+      saved.status === 200 && Array.isArray(saved.payload.value?.missing) && saved.payload.value.missing.length === 0
+    )
+
+    const onDisk = JSON.parse(await fsp.readFile(configPath, 'utf8'))
+    const statusAfter = (await getJson('/sync/status')).payload.value ?? {}
+    check(
+      'S8',
+      '配置落盘并能被状态接口读回',
+      '文件内 4 个清单 + intervalMinutes=15',
+      `file=${Object.keys(onDisk.lists ?? {}).length} readBack=${Object.keys(statusAfter.config?.lists ?? {}).length} interval=${onDisk.intervalMinutes}`,
+      Object.keys(onDisk.lists ?? {}).length === 4 && Object.keys(statusAfter.config?.lists ?? {}).length === 4 && onDisk.intervalMinutes === 15
+    )
+
+    const badQuadrant = await postJson('/sync/config', { lists: { 'no-such-quadrant': 'g_x' } })
+    check('S9', '未知象限被拒绝', '400', `status=${badQuadrant.status}`, badQuadrant.status === 400)
+
+    await fsp.rm(configPath, { force: true })
+    const created = await postJson('/sync/tasklists/create', {})
+    const createdValue = created.payload.value ?? {}
+    check(
+      'S10',
+      '一键创建四个飞书清单并写入映射',
+      '200 且 created 4 个、配置里 4 个清单',
+      `status=${created.status} created=${createdValue.created?.length} lists=${Object.keys(createdValue.config?.lists ?? {}).length}`,
+      created.status === 200 && createdValue.created?.length === 4 && Object.keys(createdValue.config?.lists ?? {}).length === 4
+    )
+
+    const run = await postJson('/sync/run', { dryRun: true })
+    check(
+      'S11',
+      '从界面触发同步（预演）',
+      '200 且统计行含「预演」',
+      `status=${run.status} summary=${run.payload.value?.summary}`,
+      run.status === 200 && String(run.payload.value?.summary ?? '').includes('预演')
+    )
+
+    await fsp.writeFile(configPath, '{ broken', 'utf8')
+    const brokenStatus = await getJson('/sync/status')
+    check(
+      'S12',
+      '损坏的同步配置不阻断状态接口',
+      '200 且 config.error 非空',
+      `status=${brokenStatus.status} error=${brokenStatus.payload.value?.config?.error}`,
+      brokenStatus.status === 200 && typeof brokenStatus.payload.value?.config?.error === 'string'
+    )
+
+    process.env.LARK_CLI = '/nonexistent/lark-cli'
+    const notInstalled = await getJson('/sync/status')
+    check(
+      'S13',
+      '未安装 lark-cli 时的降级',
+      '200 且 installed=false',
+      `status=${notInstalled.status} installed=${notInstalled.payload.value?.cli?.installed}`,
+      notInstalled.status === 200 && notInstalled.payload.value?.cli?.installed === false
+    )
+  } finally {
+    if (previousCli === undefined) delete process.env.LARK_CLI
+    else process.env.LARK_CLI = previousCli
+    if (previousUser === undefined) delete process.env.STUB_LARK_USER
+    else process.env.STUB_LARK_USER = previousUser
+    await fsp.rm(configPath, { force: true })
+    await fsp.rm(statePath, { force: true })
+    await fsp.rm(logPath, { force: true })
+  }
 }
 
 server.close()

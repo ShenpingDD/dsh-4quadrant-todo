@@ -6,6 +6,7 @@
 | 日期 | 2026-11-03 |
 | 负责角色 | engineering-software-architect |
 | 依据 | `docs/PRD-v2.md`（需求与验收）、`docs/api-v2.md`（字段与路由）、`docs/ui-spec-v2.md`（界面规格）、`lib/index.js`（715 行）、`lib/client.js`（1527 行） |
+| 2.1 追加 | 在 19 条之上新增 7 条飞书同步管理路由（`/sync/status`、`/sync/tasklists`、`/sync/login/start`、`/sync/login/poll`、`/sync/tasklists/create`、`/sync/config`、`/sync/run`），总数 26 条；它们不改待办数据，独立于写队列，交互接口见 `docs/api-v2.md` 第 13 节 |
 | 范围 | 包结构、Host 与 Client 分工、数据版本与升级、19 条路由的边界、提醒调度、重复生成、统计位置、导入导出、对话双向打通、挂载点选型 |
 | 不在范围 | 需求裁定（`docs/PRD-v2.md` 第 2 节）、逐条字段与错误文本（`docs/api-v2.md`）、视觉规格（`docs/ui-spec-v2.md`） |
 

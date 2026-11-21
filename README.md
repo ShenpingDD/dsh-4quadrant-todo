@@ -41,7 +41,7 @@ dsh plugin --profile web add github:ShenpingDD/dsh-4quadrant-todo
 dsh plugin --profile desktop add github:ShenpingDD/dsh-4quadrant-todo
 
 # 或者从本地目录（开发时用，改客户端代码刷新页面即可）
-dsh plugin --profile web add "link:D:/path/to/4quadrant-todo"
+dsh plugin --profile web add "link:/path/to/dsh-4quadrant-todo"
 ```
 
 桌面端由 App 自己管理 profile，装插件走「插件 → 插件市场 / 安装本地插件」或在 App 内执行同样的 `github:` 规格；装完重启一次（`dsh web` 或 DSH.app），侧栏出现「待办中心」。
@@ -50,38 +50,33 @@ UI 自动化脚本（`tests/cdp-harness.mjs`）默认指向最初开发用的 Wi
 
 ## 飞书同步怎么配 / Lark sync
 
-同步脚本走本机的 `lark-cli`（用户身份，`task:task:read` / `task:task:write` / `task:tasklist:read` / `task:tasklist:write`）。
+在面板右上角点「飞书同步」：那里能看到 `lark-cli` 装没装、飞书账号登没登、四个象限各对应哪个飞书清单，也能直接生成一次性的飞书授权链接（浏览器确认或飞书扫码，窗口会自动检测结果）。四象限用四个飞书任务清单承载：一个象限对应一个清单，在飞书里把任务拖进/拖出清单，下一轮同步就会把象限变化带回本地。
 
-1. 在飞书里建四个任务清单，建议命名为 `🔥紧急且重要`、`⛰️紧急不重要`、`⛳重要不紧急`、`🛶不重要不紧急`。
-2. 把清单 guid 写进数据目录的 `sync-config.json`：
+前置条件（一次就好）：
 
-```json
-{
-  "version": 1,
-  "intervalMinutes": 5,
-  "lists": {
-    "urgent-important": "<清单 guid>",
-    "urgent-not-important": "<清单 guid>",
-    "not-urgent-important": "<清单 guid>",
-    "not-urgent-not-important": "<清单 guid>"
-  }
-}
-```
+1. 本机装 `lark-cli` 并登录出用户身份（`lark-cli auth status` 里 `user` 为 ready）。
+2. 授权范围含 `task:task:read`、`task:task:write`、`task:tasklist:read`、`task:tasklist:write`；缺哪个面板里会直接写出来。
 
-3. 手动跑一次预演与真实同步：
+面板里的顺序：点「生成飞书授权链接」→ 在浏览器完成确认 → 状态变「可用」→ 点「帮我创建四个清单」（默认 `🔥 紧急且重要`、`⛰️ 紧急不重要`、`⛳ 重要不紧急`、`🛶 不重要不紧急`；也可以自己在飞书建好后在下拉里选）→「保存映射」→ 先「立即预演」看统计，再「立即同步」。
+
+命令行等价物（不给 `--api` 时默认 `http://127.0.0.1:3080/plugins/dsh-4quadrant-todo`；桌面端端口每次可能不同，从面板触发最省事）：
 
 ```powershell
-node scripts/feishu-sync.mjs --dry-run
-node scripts/feishu-sync.mjs
+node scripts/feishu-sync.mjs --list-tasklists          # 列出账号下的清单名与 guid
+node scripts/feishu-sync.mjs --dry-run                 # 预演：只统计不写入
+node scripts/feishu-sync.mjs                           # 真同步
+node scripts/feishu-sync.mjs --api http://127.0.0.1:54916/plugins/dsh-4quadrant-todo
 ```
 
-4. 定时：用 DSH 的自动化任务每 5 分钟执行一次上面的脚本，或者挂到系统计划任务。
+数据目录默认 `~/.dsh/four-quadrant-todo`（`DSH_HOME` 覆盖一层，`--data-dir` 再覆盖一层）；`LARK_CLI` 环境变量可指向非 PATH 里的 lark-cli。
 
-同步规则：`urgent-important` 等四个键与插件内部的象限标识一一对应；飞书侧不在四个清单里的任务（例如你放进「其他」的）不参与同步；本地删除只把任务移出清单，不删飞书里的任务。
+定时：脚本自身不管调度，也没有「间隔分钟数」这类配置；要自动同步就用 DSH 的自动化任务或系统计划任务定时跑一次真同步。
+
+同步规则：`urgent-important` 等四个键与插件内部的象限标识一一对应；飞书侧不在四个清单里的任务（例如你放进「其他」的）不参与同步；本地删除只把任务移出清单，不删飞书里的任务；两侧都改过的按修改时间较新的一方整条覆盖，结果写进 `sync.log`。
 
 ## 数据位置 / Data
 
-- 待办：`<DSH_HOME>/four-quadrant-todo/todos.json`，`DSH_HOME` 默认 `%USERPROFILE%\.dsh`
+- 待办：`<DSH_HOME>/four-quadrant-todo/todos.json`，`DSH_HOME` 默认 `~/.dsh`
 - 同步配置：`<DSH_HOME>/four-quadrant-todo/sync-config.json`
 - 同步映射：`sync-state.json`；同步日志：`sync.log`
 - 导入前备份：`todos.before-import-<时间戳>.json`
@@ -103,7 +98,7 @@ node tests/ui-check-edit.mjs
 node tests/ui-check-drag.mjs
 ```
 
-前三个套件自带宿主（真实 `node:http` + 临时数据目录 `tests/host-rules/.run`），不需要 DSH 在跑，任何平台都能直接执行：macOS 14 上 `verify-api-v2` 41/41、`verify-host-rules` 39/39、`audit-static` 9/9 全绿（2026-11-21 复验，DSH 0.2.2-rc.5）。
+前三个套件自带宿主（真实 `node:http` + 临时数据目录 `tests/host-rules/.run`），不需要 DSH 在跑，任何平台都能直接执行：macOS 14 上 `verify-api-v2` 54/54、`verify-host-rules` 39/39、`audit-static` 9/9 全绿（2026-11-21 复验，DSH 0.2.2-rc.5；同步接口用 `tests/host-rules/stub-lark-cli.mjs` 假 CLI，不会碰真实飞书账号）。
 
 浏览器套件用无头 Edge 通过 CDP 打开界面，需要宿主在跑（默认 `http://127.0.0.1:3080`，桌面端用 `DSH_TEST_ORIGIN` 指向它自己的端口）；会清空待办再恢复的套件在运行前把完整数据写到 `tests/.run/backups`，中断后用 `node tests/restore-backup.mjs <备份文件>` 导回。
 

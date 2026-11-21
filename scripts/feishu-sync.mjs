@@ -2,16 +2,28 @@
 // 用法：node scripts/feishu-sync.mjs [--dry-run]
 import { spawnSync } from 'node:child_process'
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import path from 'node:path'
 
-const API = 'http://127.0.0.1:3080/plugins/dsh-4quadrant-todo'
-const DSH_HOME = process.env.DSH_HOME ?? path.join(process.env.USERPROFILE ?? '', '.dsh')
-const DATA_DIR = path.join(DSH_HOME, 'four-quadrant-todo')
+// 宿主地址与数据目录都可覆盖：桌面端端口是随机分配的，不能固定为 3080
+function argOf(name) {
+  const index = process.argv.indexOf(name)
+  if (index === -1) return null
+  const value = process.argv[index + 1]
+  return typeof value === 'string' && value.trim() !== '' && value.startsWith('--') === false ? value.trim() : null
+}
+
+const API = (process.env.DSH_TODO_API ?? argOf('--api') ?? 'http://127.0.0.1:3080/plugins/dsh-4quadrant-todo').replace(/\/+$/, '')
+const DSH_HOME = process.env.DSH_HOME ?? path.join(homedir(), '.dsh')
+const DATA_DIR = argOf('--data-dir') ?? path.join(DSH_HOME, 'four-quadrant-todo')
 const CONFIG_FILE = path.join(DATA_DIR, 'sync-config.json')
 const STATE_FILE = path.join(DATA_DIR, 'sync-state.json')
 const LOG_FILE = path.join(DATA_DIR, 'sync.log')
 
+const LARK_CLI = (process.env.LARK_CLI ?? '').trim() === '' ? 'lark-cli' : process.env.LARK_CLI.trim()
+
 const DRY_RUN = process.argv.includes('--dry-run')
+const LIST_ONLY = process.argv.includes('--list-tasklists')
 const QUADRANT_IDS = ['urgent-important', 'urgent-not-important', 'not-urgent-important', 'not-urgent-not-important']
 
 const counters = { pushed: 0, pulled: 0, created: 0, conflicts: 0, skipped: 0, unchanged: 0 }
@@ -44,7 +56,7 @@ async function saveState(state) {
 
 // 飞书命令行：统一走 lark-cli，输出 JSON 信封，ok 不为 true 就地抛错
 function lark(args) {
-  const result = spawnSync('lark-cli', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  const result = spawnSync(LARK_CLI, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   if (result.error !== undefined && result.error !== null) fail(`lark-cli 启动失败: ${result.error.message}`)
   if (result.status !== 0) {
     fail(`lark-cli ${args.slice(0, 3).join(' ')} 退出码 ${result.status}: ${String(result.stderr ?? '').slice(0, 400)}`)
@@ -202,6 +214,21 @@ async function createDshTodo(task, quadrant) {
 }
 
 async function main() {
+  // 只列清单：给出名字与 guid，省去在飞书界面里手动拷贝
+  if (LIST_ONLY === true) {
+    const rows = lark(['task', 'tasklists', 'list', '--as', 'user', '--page-all', '--format', 'json'])
+    const items = Array.isArray(rows?.items) ? rows.items : Array.isArray(rows) ? rows : []
+    if (items.length === 0) {
+      console.log('账号下没有任务清单')
+      return
+    }
+    for (const item of items) {
+      const guid = item.guid ?? item.tasklist_guid ?? item.id ?? ''
+      console.log(`${item.name ?? item.summary ?? guid}\t${guid}`)
+    }
+    return
+  }
+
   const config = await readJson(CONFIG_FILE, null)
   if (config === null) fail(`缺少同步配置 ${CONFIG_FILE}，需要写 lists 字段映射四个象限到飞书清单 guid`)
   const lists = config.lists ?? {}

@@ -1,6 +1,6 @@
 {
   "name": "dsh-4quadrant-todo",
-  "version": "2.0.3",
+  "version": "2.1.0",
   "description": "Four-quadrant todos for DeepSeek Harness, two-way synced with Feishu (Lark) Tasks",
   "type": "module",
   "main": "lib/index.js",

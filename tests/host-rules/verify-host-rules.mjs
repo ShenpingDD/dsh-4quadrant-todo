@@ -62,7 +62,7 @@ const ctx = {
 
 apply(ctx, { dataDir })
 
-if (handlers.size !== 19) throw new Error(`路由数量应为 19，实际 ${handlers.size}`)
+if (handlers.size !== 26) throw new Error(`路由数量应为 26，实际 ${handlers.size}`)
 
 const server = createServer((req, res) => {
   const pathname = new URL(req.url, 'http://127.0.0.1').pathname
