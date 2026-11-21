@@ -1565,6 +1565,26 @@ function moveSummaryIsPushed(stdout) {
     )
     await postJson('/sync/config', { intervalMinutes: null })
 
+
+    // S22：脚本把「谁触发的」写进状态，自动跑完来源要标成 auto
+    process.env.LARK_CLI = stub
+    process.env.STUB_LARK_USER = 'ready'
+    await new Promise((resolve) => {
+      const child = spawn(process.execPath, [path.join(here, '../../scripts/feishu-sync.mjs'), '--api', base, '--data-dir', dataDir, '--source', 'auto'], {
+        env: { ...process.env }
+      })
+      child.stdout.on('data', () => {})
+      child.stderr.on('data', () => {})
+      child.on('close', () => resolve(null))
+    })
+    const autoTrace = ((await getJson('/sync/status')).payload.value ?? {}).autoSync ?? {}
+    check(
+      'S22',
+      '自动跑的一轮在状态里标成 auto',
+      'lastSource=auto',
+      `lastSource=${autoTrace.lastSource} lastSync=${autoTrace.lastSyncAt}`,
+      autoTrace.lastSource === 'auto' && typeof autoTrace.lastSyncAt === 'string'
+    )
   } finally {
     if (previousCli === undefined) delete process.env.LARK_CLI
     else process.env.LARK_CLI = previousCli

@@ -2,6 +2,12 @@
 
 本文件记录面向使用者的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.2.2] — 2026-11-21
+
+### 修复
+- 「自动 / 手动」标注在桌面端重载后会失真：之前靠内存里最近一次自动跑的时间去猜，宿主一重载就丢。现在 `scripts/feishu-sync.mjs` 接受 `--source auto|manual`，把触发来源随 `lastRunAt` 一起写进 `sync-state.json`，宿主定时器传 `auto`，面板按钮与命令行默认 `manual`，`/sync/status` 的 `autoSync.lastSource` 直接读文件，重启后也准。
+- 新增用例 S22（脚本 `--source auto` 跑完，状态里 `lastSource=auto`），`verify-api-v2` 63/63。
+
 ## [2.2.1] — 2026-11-21
 
 ### 新增

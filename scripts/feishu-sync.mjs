@@ -23,6 +23,8 @@ const LOG_FILE = path.join(DATA_DIR, 'sync.log')
 const LARK_CLI = (process.env.LARK_CLI ?? '').trim() === '' ? 'lark-cli' : process.env.LARK_CLI.trim()
 
 const DRY_RUN = process.argv.includes('--dry-run')
+// 谁触发的：宿主定时器传 auto，其余（面板按钮、命令行）都是 manual
+const SOURCE = argOf('--source') === 'auto' ? 'auto' : 'manual'
 const LIST_ONLY = process.argv.includes('--list-tasklists')
 const QUADRANT_IDS = ['urgent-important', 'urgent-not-important', 'not-urgent-important', 'not-urgent-not-important']
 
@@ -460,6 +462,7 @@ async function main() {
   }
 
   state.lastRunAt = stamp()
+  state.lastRunSource = SOURCE
   await saveState(state)
   const summary = `同步完成：新建 ${counters.created}，推送 ${counters.pushed}，拉取 ${counters.pulled}，未变化 ${counters.unchanged}，跳过 ${counters.skipped}，冲突 ${counters.conflicts}${DRY_RUN === true ? '（预演，未写入）' : ''}`
   await writeLog(summary)
