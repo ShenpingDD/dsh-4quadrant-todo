@@ -35,10 +35,10 @@ DeepSeek Harness 侧栏里的四象限待办中心：与飞书任务清单双向
 
 ```powershell
 # 从 GitHub 源码 —— web 端
-dsh plugin --profile web add github:ShenpingDD/4quadrant-todo
+dsh plugin --profile web add github:ShenpingDD/dsh-4quadrant-todo
 
 # 从 GitHub 源码 —— 桌面端（DSH.app）
-dsh plugin --profile desktop add github:ShenpingDD/4quadrant-todo
+dsh plugin --profile desktop add github:ShenpingDD/dsh-4quadrant-todo
 
 # 或者从本地目录（开发时用，改客户端代码刷新页面即可）
 dsh plugin --profile web add "link:D:/path/to/4quadrant-todo"

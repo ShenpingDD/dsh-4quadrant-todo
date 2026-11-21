@@ -41,11 +41,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ShenpingDD/4quadrant-todo.git"
+    "url": "https://github.com/ShenpingDD/dsh-4quadrant-todo.git"
   },
-  "homepage": "https://github.com/ShenpingDD/4quadrant-todo#readme",
+  "homepage": "https://github.com/ShenpingDD/dsh-4quadrant-todo#readme",
   "bugs": {
-    "url": "https://github.com/ShenpingDD/4quadrant-todo/issues"
+    "url": "https://github.com/ShenpingDD/dsh-4quadrant-todo/issues"
   },
   "engines": {
     "node": ">=20",
