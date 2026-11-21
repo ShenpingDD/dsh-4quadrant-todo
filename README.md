@@ -114,6 +114,10 @@ node tests/ui-check-drag.mjs
 | 0.2.2-rc.1 | 2.0.0 | 已验证（Host 路由 19 条、界面套件全绿） |
 | 0.2.2-rc.5 | 2.0.1 | 已验证（macOS 14 + 桌面端 profile：snapshot 200、41/41 API、39/39 规则、9/9 静态守卫，侧栏「待办中心」已注册） |
 
+## 版本历史 / Changelog
+
+见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 许可 / License
 
 MIT，见 [LICENSE](LICENSE)。界面与交互未复制其他项目的代码；同类项目的差异见上表。
