@@ -1546,6 +1546,25 @@ function moveSummaryIsPushed(stdout) {
       await postJson('/sync/config', { strategy: { conflict: 'newer', direction: 'both' } })
     }
 
+    // S21：状态里要同时给出「上次同步」与「计划的下次自动同步」
+    await postJson('/sync/config', { intervalMinutes: 15 })
+    const traced = (await getJson('/sync/status')).payload.value ?? {}
+    const tracedAuto = traced.autoSync ?? {}
+    const tracedGap = tracedAuto.nextRunAt === null || tracedAuto.lastSyncAt === null || tracedAuto.lastSyncAt === undefined
+      ? null
+      : Date.parse(tracedAuto.nextRunAt) - Date.parse(tracedAuto.lastSyncAt)
+    check(
+      'S21',
+      '同步状态同时给出上次同步时间与计划的下次自动同步时间',
+      'enabled=true、lastSyncAt 非空、lastSource=manual、nextRunAt = lastSyncAt + 15 分钟',
+      `enabled=${tracedAuto.enabled} lastSync=${tracedAuto.lastSyncAt} source=${tracedAuto.lastSource} next=${tracedAuto.nextRunAt} gap=${tracedGap}`,
+      tracedAuto.enabled === true &&
+        typeof tracedAuto.lastSyncAt === 'string' &&
+        tracedAuto.lastSource === 'manual' &&
+        tracedGap === 15 * 60000
+    )
+    await postJson('/sync/config', { intervalMinutes: null })
+
   } finally {
     if (previousCli === undefined) delete process.env.LARK_CLI
     else process.env.LARK_CLI = previousCli
