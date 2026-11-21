@@ -1,0 +1,12 @@
+node_modules/
+_dist/
+_pack/
+_ref/
+tests/.run/
+*.log
+sync-state.json
+sync.log
+todos.json
+todos.*.json
+.DS_Store
+Thumbs.db

@@ -1,0 +1,6 @@
+# 四象限待办：左侧栏四象限待办入口，与飞书任务清单双向同步
+# dataDir 留空时使用 <DSH_HOME>/four-quadrant-todo
+- insert:
+    - id: dsh-4quadrant-todo
+      name: 'dsh-4quadrant-todo'
+      config: {}
