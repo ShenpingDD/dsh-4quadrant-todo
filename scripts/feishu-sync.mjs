@@ -55,6 +55,9 @@ async function saveState(state) {
 }
 
 // 飞书命令行：统一走 lark-cli，输出 JSON 信封，ok 不为 true 就地抛错
+// 任务当前挂在哪个飞书清单：移除时要按真实清单来，不能用象限猜
+const guidToTasklist = new Map()
+
 function lark(args) {
   const result = spawnSync(LARK_CLI, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   if (result.error !== undefined && result.error !== null) fail(`lark-cli 启动失败: ${result.error.message}`)
@@ -181,8 +184,20 @@ async function pushDone(guid, done) {
   lark(['task', shortcut, '--task-id', guid, '--as', 'user', '--format', 'json'])
 }
 
+// 飞书没有"改清单"的接口，只能两步：先进目标清单，再从原清单移除
 async function pushList(guid, listGuid) {
-  lark(['task', 'tasks', 'patch', '--params', JSON.stringify({ task_guid: guid }), '--data', JSON.stringify({ tasklists: [{ tasklist_guid: listGuid }] }), '--as', 'user', '--format', 'json'])
+  if (typeof listGuid !== 'string' || listGuid === '') return
+  const current = guidToTasklist.get(guid)
+  if (current === listGuid) return
+  lark(['api', 'POST', `/open-apis/task/v2/tasks/${guid}/add_tasklist`, '--as', 'user', '--data', JSON.stringify({ tasklist_guid: listGuid }), '--format', 'json'])
+  if (current !== undefined) removeFromList(guid, current)
+  guidToTasklist.set(guid, listGuid)
+}
+
+function removeFromList(guid, listGuid) {
+  if (typeof listGuid !== 'string' || listGuid === '') return
+  lark(['api', 'POST', `/open-apis/task/v2/tasks/${guid}/remove_tasklist`, '--as', 'user', '--data', JSON.stringify({ tasklist_guid: listGuid }), '--format', 'json'])
+  if (guidToTasklist.get(guid) === listGuid) guidToTasklist.delete(guid)
 }
 
 async function createLarkTask(todo, listGuid) {
@@ -193,6 +208,7 @@ async function createLarkTask(todo, listGuid) {
   const guid = data.guid ?? data.task?.guid
   if (typeof guid !== 'string' || guid === '') fail('飞书创建任务没有返回 guid')
   if (todo.status === 'done') await pushDone(guid, true)
+  if (typeof listGuid === 'string') guidToTasklist.set(guid, listGuid)
   return guid
 }
 
@@ -253,6 +269,7 @@ async function main() {
       const detail = taskDetail(row.guid)
       larkTasks.set(row.guid, detail)
       guidToList.set(row.guid, quadrant)
+      guidToTasklist.set(row.guid, listGuid)
     }
   }
 
@@ -307,7 +324,7 @@ async function main() {
     const task = larkTasks.get(record.guid)
     if (todo === undefined) {
       // 本地删除了：从飞书清单移出，任务本身保留
-      if (task !== undefined && DRY_RUN !== true) await pushList(record.guid, lists[record.quadrant])
+      if (task !== undefined && DRY_RUN !== true) removeFromList(record.guid, guidToTasklist.get(record.guid) ?? lists[record.quadrant])
       delete state.items[id]
       counters.skipped += 1
       continue
@@ -320,28 +337,32 @@ async function main() {
     }
     const dshNow = fromDsh(todo)
     const larkNow = fromLark(task)
+    // 象限不在标题/截止这些字段里，要单独比：否则拖一下象限会被当成"没变化"
+    const localQuadrant = quadrantOf(todo, lists) ?? record.quadrant
+    const larkQuadrant = guidToList.get(record.guid) ?? record.quadrant
+    const localMoved = localQuadrant !== record.quadrant
+    const larkMoved = larkQuadrant !== record.quadrant
     const dshChanged = sameValue(record.dsh, dshNow) === false
     const larkChanged = sameValue(record.lark, larkNow) === false
-    if (dshChanged === false && larkChanged === false) {
+    if (dshChanged === false && larkChanged === false && localMoved === false && larkMoved === false) {
       counters.unchanged += 1
       continue
     }
 
-    const quadrant = quadrantOf(todo, lists) ?? record.quadrant
-    if (larkChanged === false) {
+    if (larkChanged === false && larkMoved === false) {
       if (DRY_RUN !== true) {
         await pushFields(record.guid, record.lark, dshNow)
         if (record.lark.done !== dshNow.done) await pushDone(record.guid, dshNow.done)
-        if (quadrant !== record.quadrant) await pushList(record.guid, lists[quadrant])
+        if (localMoved === true) await pushList(record.guid, lists[localQuadrant])
       }
       record.dsh = dshNow
       record.lark = dshNow
-      record.quadrant = quadrant
+      record.quadrant = localQuadrant
       record.syncedAt = stamp()
       counters.pushed += 1
       continue
     }
-    if (dshChanged === false) {
+    if (dshChanged === false && localMoved === false) {
       if (DRY_RUN !== true) {
         await api('/update', {
           id,
@@ -351,11 +372,11 @@ async function main() {
         })
         if (larkNow.done === true) await api('/complete', { ids: [id], includeChildren: true })
         else await api('/reopen', { ids: [id] })
-        if (quadrant !== record.quadrant) await api('/setQuadrant', { ids: [id], quadrant })
+        if (larkMoved === true) await api('/setQuadrant', { ids: [id], quadrant: larkQuadrant })
       }
       record.dsh = larkNow
       record.lark = larkNow
-      record.quadrant = quadrant
+      record.quadrant = larkQuadrant
       record.syncedAt = stamp()
       counters.pulled += 1
       continue
@@ -370,17 +391,21 @@ async function main() {
         await api('/update', { id, title: larkNow.title, description: larkNow.description, dueAt: larkNow.dueAt })
         if (larkNow.done === true) await api('/complete', { ids: [id], includeChildren: true })
         else await api('/reopen', { ids: [id] })
+        if (larkMoved === true) await api('/setQuadrant', { ids: [id], quadrant: larkQuadrant })
       }
       record.dsh = larkNow
       record.lark = larkNow
+      record.quadrant = larkQuadrant
       counters.pulled += 1
     } else {
       if (DRY_RUN !== true) {
         await pushFields(record.guid, record.lark, dshNow)
         if (record.lark.done !== dshNow.done) await pushDone(record.guid, dshNow.done)
+        if (localMoved === true) await pushList(record.guid, lists[localQuadrant])
       }
       record.dsh = dshNow
       record.lark = dshNow
+      record.quadrant = localQuadrant
       counters.pushed += 1
     }
     record.syncedAt = stamp()

@@ -2,6 +2,7 @@
 // 直接加载 lib/index.js 的 apply，用真实 node:http 与真实文件系统驱动，
 // 数据目录指向本目录下的 .run，不触碰 %DSH_HOME%。用例编号对应 docs/api-v2.md 第 10 节。
 
+import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { promises as fsp } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -1193,6 +1194,12 @@ function importPayload(document) {
   )
 }
 
+// 同步脚本最后一行是统计：换象限成功时推送计数应为 1
+function moveSummaryIsPushed(stdout) {
+  const line = String(stdout ?? '').trim().split('\n').filter((row) => row.startsWith('同步完成')).pop() ?? ''
+  return line.includes('推送 1')
+}
+
 // ---------- S. 飞书同步管理接口 ----------
 
 {
@@ -1351,6 +1358,73 @@ function importPayload(document) {
       `status=${notInstalled.status} installed=${notInstalled.payload.value?.cli?.installed}`,
       notInstalled.status === 200 && notInstalled.payload.value?.cli?.installed === false
     )
+    // S16：换象限要落成"先进目标清单、再从原清单移出"两步
+    {
+      process.env.LARK_CLI = stub
+      process.env.STUB_LARK_USER = 'ready'
+      const callLog = path.join(dataDir, 'lark-calls.ndjson')
+      await fsp.rm(callLog, { force: true })
+      process.env.STUB_LARK_LOG = callLog
+      const taskGuid = 'gtask_move'
+      process.env.STUB_LARK_DATA = JSON.stringify({
+        lists: { g_urgent: [taskGuid], g_a: [], g_b: [], g_c: [] },
+        tasks: {
+          [taskGuid]: {
+            guid: taskGuid,
+            summary: 'S16 待办',
+            description: '',
+            completed_at: '0',
+            updated_at: '2026-01-01T00:00:00+08:00'
+          }
+        }
+      })
+      await fsp.writeFile(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          lists: { 'urgent-important': 'g_urgent', 'urgent-not-important': 'g_a', 'not-urgent-important': 'g_b', 'not-urgent-not-important': 'g_c' },
+          intervalMinutes: null
+        }),
+        'utf8'
+      )
+      const made = await postJson('/create', { title: 'S16 待办', quadrant: 'urgent-important' })
+      const todoId = made.payload.value?.upserted?.[0]?.id
+      const same = { title: 'S16 待办', description: '', dueAt: null, done: false, completedAt: null }
+      await fsp.writeFile(
+        statePath,
+        JSON.stringify({ version: 1, items: { [todoId]: { guid: taskGuid, quadrant: 'urgent-important', dsh: same, lark: same, syncedAt: '2026-01-01T00:00:00.000Z' } } }),
+        'utf8'
+      )
+      await postJson('/setQuadrant', { ids: [todoId], quadrant: 'not-urgent-important' })
+      // 必须异步起子进程：宿主 HTTP 服务就在本进程里，同步阻塞会把自己锁死
+      const moved = await new Promise((resolve) => {
+        const child = spawn(process.execPath, [path.join(here, '../../scripts/feishu-sync.mjs'), '--api', base, '--data-dir', dataDir], {
+          env: { ...process.env }
+        })
+        let text = ''
+        child.stdout.on('data', (chunk) => { text += chunk })
+        child.stderr.on('data', (chunk) => { text += chunk })
+        child.on('close', (code) => resolve({ code, stdout: text }))
+      })
+      const calls = (await fsp.readFile(callLog, 'utf8')).trim().split('\n').map((line) => line)
+      const addIndex = calls.findIndex((line) => line.includes('add_tasklist') && line.includes('g_b'))
+      const removeIndex = calls.findIndex((line) => line.includes('remove_tasklist') && line.includes('g_urgent'))
+      const onDiskState = JSON.parse(await fsp.readFile(statePath, 'utf8'))
+      check(
+        'S16',
+        '换象限：先进新清单再从原清单移出',
+        '推送 1，且 add_tasklist 早于 remove_tasklist，状态改到新象限',
+        `summary=${String(moved.stdout).trim().split('\n').pop()} add=${addIndex} remove=${removeIndex} quadrant=${onDiskState.items[todoId]?.quadrant}`,
+        moveSummaryIsPushed(moved.stdout) &&
+          addIndex !== -1 &&
+          removeIndex !== -1 &&
+          addIndex < removeIndex &&
+          onDiskState.items[todoId]?.quadrant === 'not-urgent-important'
+      )
+      delete process.env.STUB_LARK_LOG
+      delete process.env.STUB_LARK_DATA
+    }
+
   } finally {
     if (previousCli === undefined) delete process.env.LARK_CLI
     else process.env.LARK_CLI = previousCli

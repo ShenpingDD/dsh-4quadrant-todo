@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 // 测试用的 lark-cli 替身：只实现插件用到的子命令，行为由 STUB_LARK_USER 控制
 // STUB_LARK_USER=missing（默认）时用户身份未就绪；=ready 时返回可用的清单数据
+import fs from 'node:fs'
+
 const args = process.argv.slice(2)
 const userReady = (process.env.STUB_LARK_USER ?? 'missing') === 'ready'
+// 记录每次调用，测试据此断言"先加目标清单、再移出原清单"
+if (process.env.STUB_LARK_LOG !== undefined) {
+  fs.appendFileSync(process.env.STUB_LARK_LOG, `${JSON.stringify(args)}\n`)
+}
+const scenario = JSON.parse(process.env.STUB_LARK_DATA ?? '{"lists":{},"tasks":{}}')
 const flag = (name) => {
   const index = args.indexOf(name)
   return index === -1 ? null : args[index + 1] ?? null
@@ -68,7 +75,36 @@ if (args[0] === 'task' && args[1] === '+tasklist-create') {
 }
 
 if (args[0] === 'task' && args[1] === 'tasklists' && args[2] === 'tasks') {
-  out({ ok: true, data: { items: [] } })
+  const params = JSON.parse(flag('--params') ?? '{}')
+  const guids = scenario.lists[params.tasklist_guid] ?? []
+  out({ ok: true, data: { items: guids.map((guid) => ({ guid })) } })
+  process.exit(0)
+}
+
+if (args[0] === 'task' && args[1] === 'tasks' && args[2] === 'get') {
+  const params = JSON.parse(flag('--params') ?? '{}')
+  out({ ok: true, data: { task: scenario.tasks[params.task_guid] ?? { guid: params.task_guid } } })
+  process.exit(0)
+}
+
+if (args[0] === 'task' && args[1] === '+create') {
+  out({ ok: true, data: { guid: 'gtask_new' } })
+  process.exit(0)
+}
+
+if (args[0] === 'task' && (args[1] === '+complete' || args[1] === '+reopen')) {
+  out({ ok: true, data: {} })
+  process.exit(0)
+}
+
+if (args[0] === 'task' && args[1] === 'tasks' && args[2] === 'patch') {
+  out({ ok: true, data: {} })
+  process.exit(0)
+}
+
+// 清单归属的增删都走原始接口：add_tasklist / remove_tasklist
+if (args[0] === 'api') {
+  out({ ok: true, data: {} })
   process.exit(0)
 }
 

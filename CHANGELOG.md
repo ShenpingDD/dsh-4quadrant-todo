@@ -2,6 +2,14 @@
 
 本文件记录面向使用者的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.2] — 2026-11-21
+
+### 修复
+- 换象限不再"只改本地"：飞书没有"改清单"的接口，之前用 `task tasks patch` 传 `tasklists` 被飞书拒绝（`code 99992402`），任务实际没动。现在改成两步——`POST /task/v2/tasks/{guid}/add_tasklist` 加进目标清单，再 `POST /task/v2/tasks/{guid}/remove_tasklist` 移出原清单；任一步失败会整体报错，不会留下"两个清单都有"的中间态。
+- 本地删除任务时只把任务移出对应清单（任务本身保留在飞书），不再错误调用「改清单」。
+- 象限变化单独就能触发同步：以前只有标题/截止/完成变了才算变化，拖一下象限会被判为「未变化」跳过。现在本地换象限推送、飞书侧移动清单拉取，两条方向都能识别。
+- 新增用例 S16：断言换象限时先 `add_tasklist` 再 `remove_tasklist`，且状态写回新象限（`verify-api-v2` 57/57）。
+
 ## [2.1.1] — 2026-11-21
 
 ### 修复
