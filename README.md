@@ -70,7 +70,7 @@ node scripts/feishu-sync.mjs --api http://127.0.0.1:54916/plugins/dsh-4quadrant-
 
 数据目录默认 `~/.dsh/four-quadrant-todo`（`DSH_HOME` 覆盖一层，`--data-dir` 再覆盖一层）；`LARK_CLI` 环境变量可指向非 PATH 里的 lark-cli。
 
-定时：脚本自身不管调度，也没有「间隔分钟数」这类配置；要自动同步就用 DSH 的自动化任务或系统计划任务定时跑一次真同步。
+定时：面板「自动同步」里可以选 `关闭 / 每 5 / 15 / 30 / 60 分钟`，选完点「保存映射」生效。间隔由桌面端宿主按分钟检查、到点就跑一轮真同步（DSH 桌面端开着才跑；身份过期或清单没配齐时静默跳过，不会写坏数据）。脚本本身仍然不管调度，用命令行时可以交给 DSH 自动化任务或系统计划任务。
 
 同步规则：`urgent-important` 等四个键与插件内部的象限标识一一对应；飞书侧不在四个清单里的任务（例如你放进「其他」的）不参与同步；本地删除只把任务移出清单，不删飞书里的任务；两侧都改过的按修改时间较新的一方整条覆盖，结果写进 `sync.log`。
 
@@ -98,7 +98,7 @@ node tests/ui-check-edit.mjs
 node tests/ui-check-drag.mjs
 ```
 
-前三个套件自带宿主（真实 `node:http` + 临时数据目录 `tests/host-rules/.run`），不需要 DSH 在跑，任何平台都能直接执行：macOS 14 上 `verify-api-v2` 54/54、`verify-host-rules` 39/39、`audit-static` 9/9 全绿（2026-11-21 复验，DSH 0.2.2-rc.5；同步接口用 `tests/host-rules/stub-lark-cli.mjs` 假 CLI，不会碰真实飞书账号）。
+前三个套件自带宿主（真实 `node:http` + 临时数据目录 `tests/host-rules/.run`），不需要 DSH 在跑，任何平台都能直接执行：macOS 14 上 `verify-api-v2` 56/56、`verify-host-rules` 39/39、`audit-static` 9/9 全绿（2026-11-21 复验，DSH 0.2.2-rc.5；同步接口用 `tests/host-rules/stub-lark-cli.mjs` 假 CLI，不会碰真实飞书账号）。
 
 浏览器套件用无头 Edge 通过 CDP 打开界面，需要宿主在跑（默认 `http://127.0.0.1:3080`，桌面端用 `DSH_TEST_ORIGIN` 指向它自己的端口）；会清空待办再恢复的套件在运行前把完整数据写到 `tests/.run/backups`，中断后用 `node tests/restore-backup.mjs <备份文件>` 导回。
 

@@ -1290,6 +1290,25 @@ function importPayload(document) {
       Object.keys(onDisk.lists ?? {}).length === 4 && Object.keys(statusAfter.config?.lists ?? {}).length === 4 && onDisk.intervalMinutes === 15
     )
 
+    const autoOn = statusAfter.autoSync ?? {}
+    check(
+      'S14',
+      '启用定时同步后状态里带间隔',
+      'enabled=true 且 intervalMinutes=15',
+      `enabled=${autoOn.enabled} interval=${autoOn.intervalMinutes}`,
+      autoOn.enabled === true && autoOn.intervalMinutes === 15
+    )
+
+    await postJson('/sync/config', { intervalMinutes: null })
+    const autoOff = (await getJson('/sync/status')).payload.value?.autoSync ?? {}
+    check(
+      'S15',
+      '关闭定时同步',
+      'enabled=false',
+      `enabled=${autoOff.enabled}`,
+      autoOff.enabled === false
+    )
+
     const badQuadrant = await postJson('/sync/config', { lists: { 'no-such-quadrant': 'g_x' } })
     check('S9', '未知象限被拒绝', '400', `status=${badQuadrant.status}`, badQuadrant.status === 400)
 

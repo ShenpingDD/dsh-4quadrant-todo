@@ -237,6 +237,8 @@ async function main() {
   }
 
   const state = await readJson(STATE_FILE, { version: 1, items: {} })
+  // 本轮开始前就存在的映射：第二节只处理这些，避免把本节新建的映射当成"飞书侧已消失"
+  const preexistingIds = Object.keys(state.items)
   const snapshot = await api('/snapshot')
   const todos = (snapshot.todos ?? []).filter((todo) => todo.parentId === null)
   const byId = new Map(todos.map((todo) => [todo.id, todo]))
@@ -282,6 +284,15 @@ async function main() {
       continue
     }
     const guid = await createLarkTask(todo, lists[quadrant])
+    // 刚建的任务要进本轮的内存映射表，否则后面的"飞书侧是否还在"检查会找不到它
+    larkTasks.set(guid, {
+      guid,
+      summary: todo.title,
+      description: todo.description ?? '',
+      completed_at: todo.status === 'done' ? String(Date.now()) : '0',
+      updated_at: String(Date.now())
+    })
+    guidToList.set(guid, quadrant)
     state.items[todo.id] = { guid, quadrant, lark: now, dsh: now, syncedAt: stamp() }
     mappedGuid.set(guid, todo.id)
     await saveState(state)
@@ -289,7 +300,9 @@ async function main() {
   }
 
   // 二、已有映射：比较两侧变化
-  for (const [id, record] of Object.entries(state.items)) {
+  for (const id of preexistingIds) {
+    const record = state.items[id]
+    if (record === undefined) continue
     const todo = byId.get(id)
     const task = larkTasks.get(record.guid)
     if (todo === undefined) {
