@@ -617,11 +617,13 @@ Host 定时器每 30 秒执行一次，对每个条目按下列顺序判定，�
 | POST | `/sync/login/start` | 启动设备码登录，返回 `deviceCode`、`verificationUrl`、`qrText`、`expiresIn` |
 | POST | `/sync/login/poll` | 用 `deviceCode` 查登录结果：`ready` 为真表示用户身份可用 |
 | POST | `/sync/tasklists/create` | 给还没选清单的象限创建同名飞书清单，并把 guid 写进配置 |
-| POST | `/sync/config` | 保存四个象限到清单的映射，可同时带 `intervalMinutes`；返回 `missing` 列出仍缺的象限 |
+| POST | `/sync/config` | 保存四个象限到清单的映射，可同时带 `intervalMinutes` 与 `strategy`；返回 `missing` 列出仍缺的象限 |
 | POST | `/sync/run` | 触发一次同步（`dryRun` 为真时只统计不写入），返回脚本末行统计与错误 |
 
 错误约定：`lark-cli` 未安装时 `/sync/status` 仍返回 200 且 `cli.installed` 为 `false`（降级展示）；`sync-config.json` 损坏时 `/sync/status` 仍返回 200，把解析错误放在 `config.error`，不阻断面板；其余写接口的错误沿用 `{ ok: false, error }` 与 4xx 状态码。
 
 `/sync/run` 由宿主用 `node scripts/feishu-sync.mjs --api <当前宿主地址> --data-dir <数据目录>` 执行，端口取自请求的 `host` 头，因此桌面端随机端口也能回连，不再依赖 3080。
+
+同步策略（2.2.0 起）：`/sync/config` 接受 `strategy: { conflict, direction }`——`conflict` 取 `newer`（较新修改的一方）、`local`、`remote`，`direction` 取 `both`、`push`（只本地写飞书）、`pull`（只飞书写本地），非法值返回 400 并说明允许值；用例 S17–S20 覆盖策略存取、校验与两种策略的实际执行。配置缺省为 `{ conflict: 'newer', direction: 'both' }`，与 2.1.x 行为一致；`/sync/status` 的 `config.strategy` 回显生效值。`scripts/feishu-sync.mjs` 按该策略执行：`push` 跳过拉取阶段与飞书侧变化，`pull` 跳过新建/推送，单向模式下反向变化计入「跳过」，两侧都改时按 `conflict` 取舍。
 
 定时同步（2.1.1 起）：`/sync/config` 接受 `intervalMinutes`（`1`–`1440` 或 `null` 关闭）。宿主每分钟检查一次，距上次运行已满间隔、用户身份就绪且四个象限都配了清单时，才用同一套命令跑一轮真同步；任何一环不满足就静默跳过。`/sync/status` 的 `autoSync` 字段给出 `enabled`、`intervalMinutes`、`running`、`lastAt`、`nextRunAt`、`lastResult`，另有 `host.base` 是宿主自己认定的插件地址，用于排查回连失败。

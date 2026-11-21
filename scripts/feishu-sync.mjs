@@ -58,6 +58,15 @@ async function saveState(state) {
 // 任务当前挂在哪个飞书清单：移除时要按真实清单来，不能用象限猜
 const guidToTasklist = new Map()
 
+// 同步策略：坏值一律回落到默认，不因为配置写错就拒绝同步
+function readStrategy(raw) {
+  const strategy = { conflict: 'newer', direction: 'both' }
+  if (raw === null || typeof raw !== 'object') return strategy
+  if (['newer', 'local', 'remote'].includes(raw.conflict)) strategy.conflict = raw.conflict
+  if (['both', 'push', 'pull'].includes(raw.direction)) strategy.direction = raw.direction
+  return strategy
+}
+
 function lark(args) {
   const result = spawnSync(LARK_CLI, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   if (result.error !== undefined && result.error !== null) fail(`lark-cli 启动失败: ${result.error.message}`)
@@ -252,6 +261,10 @@ async function main() {
     if (typeof lists[quadrant] !== 'string' || lists[quadrant] === '') fail(`同步配置里缺少象限 ${quadrant} 对应的飞书清单 guid`)
   }
 
+  const strategy = readStrategy(config.strategy)
+  const canPush = strategy.direction !== 'pull'
+  const canPull = strategy.direction !== 'push'
+
   const state = await readJson(STATE_FILE, { version: 1, items: {} })
   // 本轮开始前就存在的映射：第二节只处理这些，避免把本节新建的映射当成"飞书侧已消失"
   const preexistingIds = Object.keys(state.items)
@@ -277,7 +290,7 @@ async function main() {
   for (const [id, record] of Object.entries(state.items)) mappedGuid.set(record.guid, id)
 
   // 一、本地有、飞书没有映射的条目：建飞书任务；同名任务已存在时直接认领，避免重跑产生重复
-  for (const todo of todos) {
+  for (const todo of (canPush ? todos : [])) {
     const record = state.items[todo.id]
     if (record !== undefined) continue
     const quadrant = quadrantOf(todo, lists)
@@ -324,6 +337,10 @@ async function main() {
     const task = larkTasks.get(record.guid)
     if (todo === undefined) {
       // 本地删除了：从飞书清单移出，任务本身保留
+      if (canPush === false) {
+        counters.skipped += 1
+        continue
+      }
       if (task !== undefined && DRY_RUN !== true) removeFromList(record.guid, guidToTasklist.get(record.guid) ?? lists[record.quadrant])
       delete state.items[id]
       counters.skipped += 1
@@ -349,7 +366,7 @@ async function main() {
       continue
     }
 
-    if (larkChanged === false && larkMoved === false) {
+    if (canPush === true && larkChanged === false && larkMoved === false) {
       if (DRY_RUN !== true) {
         await pushFields(record.guid, record.lark, dshNow)
         if (record.lark.done !== dshNow.done) await pushDone(record.guid, dshNow.done)
@@ -362,7 +379,7 @@ async function main() {
       counters.pushed += 1
       continue
     }
-    if (dshChanged === false && localMoved === false) {
+    if (canPull === true && dshChanged === false && localMoved === false) {
       if (DRY_RUN !== true) {
         await api('/update', {
           id,
@@ -382,11 +399,21 @@ async function main() {
       continue
     }
 
-    // 两侧都改过：时间较新的一方为准
+    // 单向模式下反向的变化不写回，只记跳过
+    if ((canPull === false && (larkChanged === true || larkMoved === true))
+      || (canPush === false && (dshChanged === true || localMoved === true))) {
+      counters.skipped += 1
+      continue
+    }
+
+    // 两侧都改过：按策略决定以哪一侧为准（默认时间较新的一方）
     counters.conflicts += 1
     const dshTime = dshUpdatedMs(todo)
     const larkTime = larkUpdatedMs(task)
-    if (larkTime > dshTime) {
+    const preferLark = canPull === false
+      ? false
+      : (canPush === false ? true : (strategy.conflict === 'remote' || (strategy.conflict === 'newer' && larkTime > dshTime)))
+    if (preferLark === true) {
       if (DRY_RUN !== true) {
         await api('/update', { id, title: larkNow.title, description: larkNow.description, dueAt: larkNow.dueAt })
         if (larkNow.done === true) await api('/complete', { ids: [id], includeChildren: true })
@@ -413,7 +440,7 @@ async function main() {
   }
 
   // 三、飞书清单里有、本地没有映射的条目：拉进待办中心；同标题已在本地时按重复副本处理，不重复建
-  for (const [guid, task] of larkTasks.entries()) {
+  for (const [guid, task] of (canPull ? larkTasks.entries() : [])) {
     if (mappedGuid.has(guid) === true) continue
     if (Object.values(state.items).some((record) => record.guid === guid)) continue
     if (todos.some((todo) => todo.title === task.summary)) {

@@ -1425,6 +1425,127 @@ function moveSummaryIsPushed(stdout) {
       delete process.env.STUB_LARK_DATA
     }
 
+
+    // S17–S19：同步策略（方向 / 冲突处理）能存能读，且脚本按策略执行
+    {
+      const saved = await postJson('/sync/config', { strategy: { conflict: 'local', direction: 'push' } })
+      const after = (await getJson('/sync/status')).payload.value ?? {}
+      const onDiskStrategy = JSON.parse(await fsp.readFile(configPath, 'utf8')).strategy ?? {}
+      check(
+        'S17',
+        '保存同步策略并能读回',
+        '200 且 conflict=local direction=push',
+        `status=${saved.status} conflict=${after.config?.strategy?.conflict} direction=${after.config?.strategy?.direction} file=${onDiskStrategy.conflict}/${onDiskStrategy.direction}`,
+        saved.status === 200 &&
+          after.config?.strategy?.conflict === 'local' &&
+          after.config?.strategy?.direction === 'push' &&
+          onDiskStrategy.conflict === 'local' &&
+          onDiskStrategy.direction === 'push'
+      )
+
+      const badConflict = await postJson('/sync/config', { strategy: { conflict: 'whatever' } })
+      const badDirection = await postJson('/sync/config', { strategy: { direction: 'sideways' } })
+      const badBody = await postJson('/sync/config', { strategy: 'both' })
+      check(
+        'S18',
+        '非法同步策略被拒绝',
+        '400 且提示具体字段',
+        `conflict=${badConflict.status} direction=${badDirection.status} body=${badBody.status}`,
+        badConflict.status === 400 &&
+          badDirection.status === 400 &&
+          badBody.status === 400 &&
+          String(badConflict.payload?.error ?? '').includes('冲突策略') &&
+          String(badDirection.payload?.error ?? '').includes('同步方向')
+      )
+
+      // 只推送模式：飞书里有、本地没有的任务不该被拉进来
+      process.env.LARK_CLI = stub
+      process.env.STUB_LARK_USER = 'ready'
+      const strayGuid = 'gtask_stray'
+      process.env.STUB_LARK_DATA = JSON.stringify({
+        lists: { g_urgent: [], g_a: [strayGuid], g_b: [], g_c: [] },
+        tasks: {
+          [strayGuid]: {
+            guid: strayGuid,
+            summary: '飞书独有任务',
+            description: '',
+            completed_at: '0',
+            updated_at: '2026-01-02T00:00:00+08:00'
+          }
+        }
+      })
+      const localTodos = (await getJson('/snapshot')).payload.value?.todos ?? []
+      const localIds = localTodos.filter((todo) => todo.parentId === null).map((todo) => todo.id)
+      if (localIds.length > 0) await postJson('/remove', { ids: localIds })
+      const pushed = await new Promise((resolve) => {
+        const child = spawn(process.execPath, [path.join(here, '../../scripts/feishu-sync.mjs'), '--api', base, '--data-dir', dataDir], {
+          env: { ...process.env }
+        })
+        let text = ''
+        child.stdout.on('data', (chunk) => { text += chunk })
+        child.stderr.on('data', (chunk) => { text += chunk })
+        child.on('close', (code) => resolve({ code, stdout: text }))
+      })
+      const pulledTodos = ((await getJson('/snapshot')).payload.value?.todos ?? []).filter((todo) => todo.parentId === null)
+      check(
+        'S19',
+        '只推送模式不拉取飞书独有的任务',
+        '摘要「拉取 0」且本地没有新增待办',
+        `summary=${String(pushed.stdout).trim().split('\n').pop()} todos=${pulledTodos.length}`,
+        String(pushed.stdout).includes('拉取 0') && pulledTodos.length === 0
+      )
+      delete process.env.STUB_LARK_DATA
+      await postJson('/sync/config', { strategy: { conflict: 'newer', direction: 'both' } })
+
+      // S20：两侧都改过时，冲突策略选「以本地为准」，即使飞书更新更晚也推本地
+      process.env.LARK_CLI = stub
+      process.env.STUB_LARK_USER = 'ready'
+      const clashGuid = 'gtask_clash'
+      process.env.STUB_LARK_DATA = JSON.stringify({
+        lists: { g_urgent: [clashGuid], g_a: [], g_b: [], g_c: [] },
+        tasks: {
+          [clashGuid]: {
+            guid: clashGuid,
+            summary: '飞书侧改过的标题',
+            description: '',
+            completed_at: '0',
+            updated_at: '2026-02-01T00:00:00+08:00'
+          }
+        }
+      })
+      const clash = await postJson('/create', { title: '本地侧改过的标题', quadrant: 'urgent-important' })
+      const clashId = clash.payload.value?.upserted?.[0]?.id
+      const oldSnapshot = { title: '原始标题', description: '', dueAt: null, done: false, completedAt: null }
+      await fsp.writeFile(
+        statePath,
+        JSON.stringify({ version: 1, items: { [clashId]: { guid: clashGuid, quadrant: 'urgent-important', dsh: oldSnapshot, lark: oldSnapshot, syncedAt: '2026-01-01T00:00:00.000Z' } } }),
+        'utf8'
+      )
+      await postJson('/sync/config', { strategy: { conflict: 'local', direction: 'both' } })
+      const preferred = await new Promise((resolve) => {
+        const child = spawn(process.execPath, [path.join(here, '../../scripts/feishu-sync.mjs'), '--api', base, '--data-dir', dataDir], {
+          env: { ...process.env }
+        })
+        let text = ''
+        child.stdout.on('data', (chunk) => { text += chunk })
+        child.stderr.on('data', (chunk) => { text += chunk })
+        child.on('close', (code) => resolve({ code, stdout: text }))
+      })
+      const clashTodos = (await getJson('/snapshot')).payload.value?.todos ?? []
+      const clashTodo = clashTodos.find((todo) => todo.id === clashId)
+      check(
+        'S20',
+        '冲突策略选「以本地为准」时推本地而不是拉飞书',
+        '摘要含「冲突 1」且摘要为「推送 1」，本地标题不变',
+        `summary=${String(preferred.stdout).trim().split('\n').pop()} title=${clashTodo?.title}`,
+        String(preferred.stdout).includes('冲突 1') &&
+          moveSummaryIsPushed(preferred.stdout) === true &&
+          clashTodo?.title === '本地侧改过的标题'
+      )
+      delete process.env.STUB_LARK_DATA
+      await postJson('/sync/config', { strategy: { conflict: 'newer', direction: 'both' } })
+    }
+
   } finally {
     if (previousCli === undefined) delete process.env.LARK_CLI
     else process.env.LARK_CLI = previousCli

@@ -92,6 +92,11 @@ if (args[0] === 'task' && args[1] === '+create') {
   process.exit(0)
 }
 
+if (args[0] === 'task' && args[1] === '+update') {
+  out({ ok: true, data: {} })
+  process.exit(0)
+}
+
 if (args[0] === 'task' && (args[1] === '+complete' || args[1] === '+reopen')) {
   out({ ok: true, data: {} })
   process.exit(0)
