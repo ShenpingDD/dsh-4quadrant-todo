@@ -34,14 +34,19 @@ DeepSeek Harness 侧栏里的四象限待办中心：与飞书任务清单双向
 要求：DSH 0.2.2-rc.1（本机实测）、Node.js 24。
 
 ```powershell
-# 从 GitHub 源码
+# 从 GitHub 源码 —— web 端
 dsh plugin --profile web add github:ShenpingDD/4quadrant-todo
+
+# 从 GitHub 源码 —— 桌面端（DSH.app）
+dsh plugin --profile desktop add github:ShenpingDD/4quadrant-todo
 
 # 或者从本地目录（开发时用，改客户端代码刷新页面即可）
 dsh plugin --profile web add "link:D:/path/to/4quadrant-todo"
 ```
 
-装完重启一次 `dsh web`，侧栏出现「待办中心」。
+桌面端由 App 自己管理 profile，装插件走「插件 → 插件市场 / 安装本地插件」或在 App 内执行同样的 `github:` 规格；装完重启一次（`dsh web` 或 DSH.app），侧栏出现「待办中心」。
+
+UI 自动化脚本（`tests/cdp-harness.mjs`）默认指向最初开发用的 Windows 路径，换机器用环境变量覆盖即可：`DSH_TEST_BROWSER`（Edge/Chrome 可执行文件）、`DSH_TEST_ORIGIN`（宿主地址，桌面端多为 `http://127.0.0.1:54916`）、`DSH_WEB_LOG`（写着访问地址的宿主日志）。
 
 ## 飞书同步怎么配 / Lark sync
 

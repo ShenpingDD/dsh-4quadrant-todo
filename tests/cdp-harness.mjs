@@ -4,11 +4,15 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
-export const PORT = 9334
-export const ORIGIN = 'http://127.0.0.1:3080'
+// 平台默认值来自最初开发的 Windows 机器；换机器时用环境变量覆盖，不必改代码：
+//   DSH_TEST_BROWSER  Edge/Chrome 可执行文件
+//   DSH_TEST_ORIGIN   宿主地址（桌面端通常是 http://127.0.0.1:54916）
+//   DSH_WEB_LOG       宿主日志里写着访问地址的那份文件
+export const EDGE = process.env.DSH_TEST_BROWSER ?? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+export const PORT = Number(process.env.DSH_TEST_CDP_PORT ?? 9334)
+export const ORIGIN = process.env.DSH_TEST_ORIGIN ?? 'http://127.0.0.1:3080'
 export const API = `${ORIGIN}/plugins/dsh-4quadrant-todo`
-export const SERVER_LOG = 'D:\\Workspace\\Deepseek Harness Workspace\\.dsh-logs\\web-3080.stdout.log'
+export const SERVER_LOG = process.env.DSH_WEB_LOG ?? 'D:\\Workspace\\Deepseek Harness Workspace\\.dsh-logs\\web-3080.stdout.log'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 // 浏览器配置目录放在 .run 下，与运行期产物同处
@@ -129,7 +133,7 @@ export async function apiGet(route) {
 }
 
 // 插件数据目录，与 Host 的默认取值一致
-export const dataDir = path.join(process.env.DSH_HOME ?? path.join(process.env.USERPROFILE ?? '', '.dsh'), 'four-quadrant-todo')
+export const dataDir = path.join(process.env.DSH_HOME ?? path.join(process.env.USERPROFILE ?? process.env.HOME ?? '', '.dsh'), 'four-quadrant-todo')
 
 export async function readServerUrl() {
   const text = await readFile(SERVER_LOG, 'utf8')
