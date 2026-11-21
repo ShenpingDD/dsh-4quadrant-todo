@@ -22,11 +22,13 @@
   "files": [
     "lib",
     "locale",
+    "assets",
     "icon.svg",
     "cordis.patch.yml",
     "scripts",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "keywords": [
     "dsh",
