@@ -4,6 +4,10 @@ Four-quadrant (Eisenhower Matrix) todos inside DeepSeek Harness, two-way synced 
 
 DeepSeek Harness 侧栏里的四象限待办中心：与飞书任务清单双向同步，并且能把会话里还没确认的事项直接变成待办。
 
+![四象限面板与飞书任务清单双向同步](assets/screenshots/board-and-feishu-sync.png)
+
+左边是四象限面板，右边是「飞书同步」：四个象限各对应一个飞书任务清单，同步方向、两侧都改过时怎么取、自动同步间隔都在这里改，改完下一轮同步就按新规则跑。
+
 ## 为什么值得用 / Why this one
 
 四象限待办插件在 DSH 生态里已经有两个，飞书相关的也有几个，但它们的组合里缺两块：
