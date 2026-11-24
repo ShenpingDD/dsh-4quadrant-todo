@@ -1,16 +1,55 @@
-# 4Quadrant Todo · 四象限待办
+# 🧭 dsh-4quadrant-todo · 四象限待办 —— DeepSeek Harness 插件
 
-Four-quadrant (Eisenhower Matrix) todos inside DeepSeek Harness, two-way synced with Feishu / Lark Tasks, and able to turn a conversation's pending confirmations into real todos.
+<p>
+  <a href="https://github.com/ShenpingDD/dsh-4quadrant-todo/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/ShenpingDD/dsh-4quadrant-todo?label=release&color=2f6f4f"></a>
+  <a href="LICENSE"><img alt="license" src="https://img.shields.io/github/license/ShenpingDD/dsh-4quadrant-todo?label=license&color=2f6f4f"></a>
+  <a href="package.json"><img alt="DSH" src="https://img.shields.io/badge/DSH-0.2.2--rc.5-1f6feb"></a>
+  <a href="https://awesome-dsh-plugin.com/p/ShenpingDD/dsh-4quadrant-todo/"><img alt="listed in awesome-dsh-plugin" src="https://img.shields.io/badge/awesome--dsh--plugin-listed-2f6f4f"></a>
+</p>
 
-DeepSeek Harness 侧栏里的四象限待办中心：与飞书任务清单双向同步，并且能把会话里还没确认的事项直接变成待办。
+> Four-quadrant (Eisenhower Matrix) todos living in the DeepSeek Harness sidebar, two-way synced with Feishu / Lark Tasks, and able to turn a conversation's pending confirmations into real todos.
+>
+> DeepSeek Harness 侧栏里的四象限待办中心：与飞书任务清单双向同步，并且能把会话里还没确认的事项直接变成待办。
 
-![四象限面板与飞书任务清单双向同步](assets/screenshots/board-and-feishu-sync.png)
+<img src="assets/screenshots/board-and-feishu-sync.png" alt="四象限面板与飞书任务清单双向同步">
 
-左边是四象限面板，右边是「飞书同步」：四个象限各对应一个飞书任务清单，同步方向、两侧都改过时怎么取、自动同步间隔都在这里改，改完下一轮同步就按新规则跑。
+## 🧩 这是什么
 
-四象限面板、与飞书任务清单双向同步、把会话里没确认的事变成待办——这三件事通常散在不同工具里，这里接成一条链路：象限不是贴在任务上的标签，而是飞书清单本身，卡片拖动换象限就等于把它挪进另一个清单，反过来在飞书里换了清单，本地象限也跟着变。待办数据仍是一个本地 JSON 文件，没有账号，也不要求把清单托管到别处；会话里冒出来的待确认项，点确认的那一刻就进入待办列表，象限与截止时间顺着上下文带过来。
+这是一个 **DeepSeek Harness（DSH）插件**，不是独立应用。它以 *web profile bundle* 的形式发布——一个普通的 npm 包，由 DSH 装进某个 profile、每次启动自动加载，往你已经在用的界面里补上四块东西：
 
-## 功能 / Features
+| 落点（槽位） | 是什么 |
+|---|---|
+| `sidebar.panellist` | 侧栏里的「待办中心」面板 —— 四象限看板本体 |
+| `main` | 面板展开后的主区域视图 |
+| `conversation.input.dock` | 输入框上方的**待确认条**：会话里待确认的事项，点一下变成待办 |
+| `shell.overlay` | 悬浮层（提醒气泡等） |
+
+宿主端（`lib/index.js`）在 harness 的 `webServer` 上注册 JSON 路由，负责待办读写、导入导出、提醒与飞书同步；数据落在一个本地 JSON 文件里。除此之外不碰任何东西：不开新窗口、不起独立服务，卸载这个包，面板与待办条一起消失。
+
+> 前提是你已经有一个可用的 DSH 环境（本次发布验证在 **0.2.2-rc.5**）。还没装 DSH 的话请先装它——单独装这个包不会有任何效果。
+
+## 🚀 快速开始
+
+已收录于 [awesome-dsh-plugin](https://awesome-dsh-plugin.com/p/ShenpingDD/dsh-4quadrant-todo/) 注册表，DSH 桌面端的插件市场可以直接搜到并安装。命令行方式（`<profile>` 换成你实际在跑的那个）：
+
+```bash
+# web 端
+dsh plugin --profile web add github:ShenpingDD/dsh-4quadrant-todo
+
+# 桌面端（DSH.app 自己管理 profile，也可在 App 的「插件市场 / 安装本地插件」里装）
+dsh plugin --profile desktop add github:ShenpingDD/dsh-4quadrant-todo
+
+# 本地目录（开发时用，改客户端代码刷新页面即可）
+dsh plugin --profile web add "link:/path/to/dsh-4quadrant-todo"
+
+# 重启后侧栏出现「待办中心」
+```
+
+卸载：`dsh plugin --profile <profile> remove dsh-4quadrant-todo`。
+
+UI 自动化脚本（`tests/cdp-harness.mjs`）默认指向最初开发用的 Windows 路径，换机器用环境变量覆盖即可：`DSH_TEST_BROWSER`（Edge/Chrome 可执行文件）、`DSH_TEST_ORIGIN`（宿主地址，桌面端多为 `http://127.0.0.1:54916`）、`DSH_WEB_LOG`（写着访问地址的宿主日志）。
+
+## ✨ 功能
 
 - **四象限面板**：每格纵向单列卡片，44 像素行高，标题在左、倒计时贴右边缘齐平；拖拽可跨象限移动。
 - **时间压力可读**：倒计时分七档 —— 未安排、逾期（按分、时、天三档精度）、今天、明天、周X、同年月日、跨年；逾期文字与错误文字用 88% 混色。
@@ -21,26 +60,17 @@ DeepSeek Harness 侧栏里的四象限待办中心：与飞书任务清单双向
 - **本地优先**：数据就是一个 JSON 文件，导出导入都在本机，导入前自动备份并支持撤销；没有账号体系。
 - **零运行时依赖**：客户端只依赖 React，Host 只用 Node 内置模块；颜色全部走 DSH 主题令牌，深浅色自适应，系统开启「减少动态效果」时动效归零。
 
-## 安装 / Install
+## 📸 界面
 
-要求：DSH 0.2.2-rc.1（本机实测）、Node.js 24。
+<img src="assets/icon-180.png" width="72" align="right" alt="dsh-4quadrant-todo 图标">
 
-```powershell
-# 从 GitHub 源码 —— web 端
-dsh plugin --profile web add github:ShenpingDD/dsh-4quadrant-todo
+实机截图（DeepSeek Harness 0.2.2-rc.5）：左边是四象限面板，右边是「飞书同步」——四个象限各对应一个飞书任务清单，同步方向、两侧都改过时怎么取、自动同步间隔都在这里改，改完下一轮同步就按新规则跑。
 
-# 从 GitHub 源码 —— 桌面端（DSH.app）
-dsh plugin --profile desktop add github:ShenpingDD/dsh-4quadrant-todo
+<img src="assets/screenshots/board-and-feishu-sync.png" alt="四象限看板与飞书同步设置">
 
-# 或者从本地目录（开发时用，改客户端代码刷新页面即可）
-dsh plugin --profile web add "link:/path/to/dsh-4quadrant-todo"
-```
+四象限面板、与飞书任务清单双向同步、把会话里没确认的事变成待办——这三件事通常散在不同工具里，这里接成一条链路：象限不是贴在任务上的标签，而是飞书清单本身，卡片拖动换象限就等于把它挪进另一个清单，反过来在飞书里换了清单，本地象限也跟着变。待办数据仍是一个本地 JSON 文件，没有账号，也不要求把清单托管到别处；会话里冒出来的待确认项，点确认的那一刻就进入待办列表，象限与截止时间顺着上下文带过来。
 
-桌面端由 App 自己管理 profile，装插件走「插件 → 插件市场 / 安装本地插件」或在 App 内执行同样的 `github:` 规格；装完重启一次（`dsh web` 或 DSH.app），侧栏出现「待办中心」。
-
-UI 自动化脚本（`tests/cdp-harness.mjs`）默认指向最初开发用的 Windows 路径，换机器用环境变量覆盖即可：`DSH_TEST_BROWSER`（Edge/Chrome 可执行文件）、`DSH_TEST_ORIGIN`（宿主地址，桌面端多为 `http://127.0.0.1:54916`）、`DSH_WEB_LOG`（写着访问地址的宿主日志）。
-
-## 飞书同步怎么配 / Lark sync
+## 🔄 飞书同步怎么配
 
 在面板右上角点「飞书同步」：那里能看到 `lark-cli` 装没装、飞书账号登没登、四个象限各对应哪个飞书清单，也能直接生成一次性的飞书授权链接（浏览器确认或飞书扫码，窗口会自动检测结果）。四象限用四个飞书任务清单承载：一个象限对应一个清单，在飞书里把任务拖进/拖出清单，下一轮同步就会把象限变化带回本地。
 
@@ -53,7 +83,7 @@ UI 自动化脚本（`tests/cdp-harness.mjs`）默认指向最初开发用的 Wi
 
 命令行等价物（不给 `--api` 时默认 `http://127.0.0.1:3080/plugins/dsh-4quadrant-todo`；桌面端端口每次可能不同，从面板触发最省事）：
 
-```powershell
+```bash
 node scripts/feishu-sync.mjs --list-tasklists          # 列出账号下的清单名与 guid
 node scripts/feishu-sync.mjs --dry-run                 # 预演：只统计不写入
 node scripts/feishu-sync.mjs                           # 真同步
@@ -72,20 +102,30 @@ node scripts/feishu-sync.mjs --api http://127.0.0.1:54916/plugins/dsh-4quadrant-
 
 删除的语义是固定的，不受上面的策略影响：本地删除只把任务移出对应清单，飞书里的任务保留；飞书侧移出清单或删除，本地只解除对应关系。
 
-同步规则：`urgent-important` 等四个键与插件内部的象限标识一一对应；飞书侧不在四个清单里的任务（例如你放进「其他」的）不参与同步；本地删除只把任务移出清单，不删飞书里的任务；两侧都改过的按面板里选的冲突策略整条覆盖，结果写进 `sync.log`。
+同步规则：`urgent-important` 等四个键与插件内部的象限标识一一对应；飞书侧不在四个清单里的任务（例如你放进「其他」的）不参与同步；两侧都改过的按面板里选的冲突策略整条覆盖，结果写进 `sync.log`。
 
-## 数据位置 / Data
+## 💾 数据位置与隐私
 
 - 待办：`<DSH_HOME>/four-quadrant-todo/todos.json`，`DSH_HOME` 默认 `~/.dsh`
 - 同步配置：`<DSH_HOME>/four-quadrant-todo/sync-config.json`
 - 同步映射：`sync-state.json`；同步日志：`sync.log`
 - 导入前备份：`todos.before-import-<时间戳>.json`
 
-格式版本为 2；1.0 数据会只读展示并提供升级按钮，文件损坏时阻止加载并报错，不做自动迁移。
+格式版本为 2；1.0 数据会只读展示并提供升级按钮，文件损坏时阻止加载并报错，不做自动迁移。除你主动开启的飞书同步外，插件不向外发请求，也没有遥测。
 
-## 开发 / Development
+## 🧱 兼容性
 
-```powershell
+| DSH | 插件 | 结论 |
+| --- | --- | --- |
+| 0.2.2-rc.1 | 2.0.0 | 已验证（Host 路由 19 条、界面套件全绿） |
+| 0.2.2-rc.5 | 2.0.1 | 已验证（macOS 14 + 桌面端 profile：snapshot 200、41/41 API、39/39 规则、9/9 静态守卫，侧栏「待办中心」已注册） |
+| 0.2.2-rc.5 | 2.2.3 | 已验证（26 条路由补上宿主访问检查；macOS 14 上静态守卫与规则套件全绿） |
+
+其他要求：Node.js `>=20`（`package.json` 声明 `engines.dsh = >=0.2.2-rc.1 <0.3.0-0`），profile 装你实际跑的那个。
+
+## 🛠 开发
+
+```bash
 node --check lib/index.js
 node --check lib/client.js
 node --check scripts/feishu-sync.mjs
@@ -102,17 +142,12 @@ node tests/ui-check-drag.mjs
 
 浏览器套件用无头 Edge 通过 CDP 打开界面，需要宿主在跑（默认 `http://127.0.0.1:3080`，桌面端用 `DSH_TEST_ORIGIN` 指向它自己的端口）；会清空待办再恢复的套件在运行前把完整数据写到 `tests/.run/backups`，中断后用 `node tests/restore-backup.mjs <备份文件>` 导回。
 
-## 兼容性 / Compatibility
+## 📚 文档与版本历史
 
-| DSH | 插件 | 结论 |
-| --- | --- | --- |
-| 0.2.2-rc.1 | 2.0.0 | 已验证（Host 路由 19 条、界面套件全绿） |
-| 0.2.2-rc.5 | 2.0.1 | 已验证（macOS 14 + 桌面端 profile：snapshot 200、41/41 API、39/39 规则、9/9 静态守卫，侧栏「待办中心」已注册） |
+- [docs/PRD-v2.md](docs/PRD-v2.md) · [docs/api-v2.md](docs/api-v2.md) · [docs/architecture-v2.md](docs/architecture-v2.md) · [docs/ui-spec-v2.md](docs/ui-spec-v2.md)
+- 早期版本：[docs/PRD.md](docs/PRD.md) · [docs/api.md](docs/api.md) · [docs/architecture.md](docs/architecture.md) · [docs/ui-spec.md](docs/ui-spec.md)
+- 变更记录：[CHANGELOG.md](CHANGELOG.md)
 
-## 版本历史 / Changelog
+## ⚖️ License
 
-见 [CHANGELOG.md](CHANGELOG.md)。
-
-## 许可 / License
-
-MIT，见 [LICENSE](LICENSE)。界面与交互未复制其他项目的代码；同类项目的差异见上表。
+MIT，见 [LICENSE](LICENSE)。界面与交互未复制其他项目的代码。
