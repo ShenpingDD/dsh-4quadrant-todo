@@ -815,6 +815,29 @@ await probe('C22', 'requirement', 'PRD 12.3', '文件被改坏后下一次请求
     }
   })
 
+await probe('C23', 'requirement', 'api.md 1 访问检查', '跨站与跨端口 Origin 被拒，同源 Origin 放行，Origin: null 被拒', '跨站 403、跨端口 403、Origin: null 403、同源 200', async () => {
+  await resetData()
+  const origin = new URL(base).origin
+  const crossSite = await request('GET', '/snapshot', { headers: { origin: 'http://evil.example.com' } })
+  const crossPort = await request('GET', '/snapshot', { headers: { origin: origin.replace(/:(\d+)$/, ':1') } })
+  const nullOrigin = await request('GET', '/snapshot', { headers: { origin: 'null' } })
+  const sameSite = await request('GET', '/snapshot', { headers: { origin } })
+  return {
+    pass:
+      crossSite.status === 403 && crossPort.status === 403 && nullOrigin.status === 403 && sameSite.status === 200,
+    text: `跨站 status=${crossSite.status} 跨端口 status=${crossPort.status} Origin:null status=${nullOrigin.status} 同源 status=${sameSite.status}`
+  }
+})
+
+await probe('C24', 'requirement', 'api.md 1 访问检查', '不带 Origin 的本机调用照常可用（同步脚本走这条路）', 'status=200 且返回快照', async () => {
+  await resetData()
+  const plain = await request('GET', '/snapshot')
+  return {
+    pass: plain.status === 200 && plain.payload.ok === true,
+    text: `status=${plain.status} ok=${plain.payload.ok}`
+  }
+})
+
 // ---------- 汇总 ----------
 
 await new Promise((resolve) => server.close(resolve))

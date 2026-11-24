@@ -1,6 +1,6 @@
 {
   "name": "dsh-4quadrant-todo",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "Four-quadrant todos for DeepSeek Harness, two-way synced with Feishu (Lark) Tasks",
   "type": "module",
   "main": "lib/index.js",
@@ -27,6 +27,7 @@
     "cordis.patch.yml",
     "scripts",
     "LICENSE",
+    "screenshots.json",
     "README.md",
     "CHANGELOG.md"
   ],

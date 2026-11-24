@@ -2,6 +2,19 @@
 
 本文件记录面向使用者的变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.2.3] — 2026-11-24
+
+### 安全
+- 插件自己的 26 条 HTTP 路由现在会先过宿主的访问检查。宿主只把 `/api` 前缀的请求交给 `connection.requestRejection`（先看 `Host` / `Origin` 是否可信，再要一个已登录浏览器的会话），而这些路由是插件自己按 exact 路径注册在 `/plugins/dsh-4quadrant-todo` 下的，此前绕过了那道检查：同一个本机端口上，浏览器里任意一个网页都能读快照、建待办、触发同步。收录时维护者在描述里加了一句提醒，这条改动是把它去掉的前提。
+- 检查分两道，都在 `wrap()` 里统一执行：
+  - **同源检查**：`Host` 必须是本机回环（或宿主 `connection.trustedHosts` 里声明的名字），`Sec-Fetch-Site: cross-site` 直接拒，`Origin` 出现时必须与 `Host` 同源，`Origin: null` 与解析失败也拒；没有 `Origin` 的请求（命令行、同步脚本、桌面端代理）照常放行。
+  - **宿主 gate**：只对带 Cookie 的请求执行，那是浏览器会话的特征；gate 判 401 / 403 就把同一个状态码返回去。同步脚本是 Node 进程、不带 Cookie，不受影响。
+- 桌面端（`dsh-app://` 页面）跳过第二道，理由与市场里同类插件一致：还没在真实桌面端量过页面请求是否携带 gate 认得的那份会话，盲开会把面板自己锁在外面。第一道在桌面端同样生效。
+- 新增用例 C23（跨站 Origin、跨端口 Origin、`Origin: null` 都 403，同源 Origin 放行）、C24（不带 Origin 的本机调用照常 200），`verify-host-rules` 41/41。
+
+### 变更
+- 仓库根新增 `screenshots.json` 与 `assets/screenshots/board-and-feishu-sync.png`（四象限面板 + 飞书同步），插件市场的详情页按它展示截图。
+
 ## [2.2.2] — 2026-11-21
 
 ### 修复
